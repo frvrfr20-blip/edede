@@ -1,0 +1,174 @@
+local function readBaseFlowUISource()
+    if readfile and isfile and isfile("flowuisource.lua") then
+        return readfile("flowuisource.lua")
+    end
+
+    return game:HttpGet("https://raw.githubusercontent.com/0x1s2s/9xx38xx374723ui/refs/heads/main/eee")
+end
+
+local BaseLibrary = loadstring(readBaseFlowUISource())()
+local baseNew = BaseLibrary.new
+
+local V2Palette = {
+    Accent = Color3.fromRGB(255, 87, 122),
+    Background = Color3.fromRGB(17, 17, 22),
+    Secondary = Color3.fromRGB(23, 23, 30),
+    Surface = Color3.fromRGB(27, 27, 35),
+    SurfaceSoft = Color3.fromRGB(31, 31, 40),
+    Border = Color3.fromRGB(48, 48, 61),
+    Text = Color3.fromRGB(246, 247, 251),
+    SubText = Color3.fromRGB(138, 141, 156),
+    Muted = Color3.fromRGB(104, 107, 122)
+}
+
+local function findFirstChildOfClass(parent, className)
+    if not parent or not parent.GetChildren then
+        return nil
+    end
+
+    for _, child in ipairs(parent:GetChildren()) do
+        if child.ClassName == className then
+            return child
+        end
+    end
+
+    return nil
+end
+
+local function tintStroke(target, color, thickness)
+    local stroke = findFirstChildOfClass(target, "UIStroke")
+    if stroke then
+        stroke.Color = color
+        if thickness then
+            stroke.Thickness = thickness
+        end
+    end
+end
+
+local function tintCorners(target, offset)
+    local corner = findFirstChildOfClass(target, "UICorner")
+    if corner then
+        corner.CornerRadius = UDim.new(0, offset)
+    end
+end
+
+local function styleGroup(groupObj)
+    if not groupObj or not groupObj.mainFrame then
+        return
+    end
+
+    groupObj.mainFrame.BackgroundColor3 = V2Palette.Secondary
+    tintStroke(groupObj.mainFrame, V2Palette.Border, 1.15)
+    tintCorners(groupObj.mainFrame, 14)
+end
+
+local function styleTab(tabObj)
+    if not tabObj then
+        return
+    end
+
+    if tabObj.buttonFrame then
+        tabObj.buttonFrame.BackgroundColor3 = V2Palette.Surface
+        tintCorners(tabObj.buttonFrame, 12)
+    end
+
+    if tabObj.iconImg and not tabObj.isActive then
+        tabObj.iconImg.ImageColor3 = V2Palette.Muted
+    end
+
+    if tabObj.nameLabel and not tabObj.isActive then
+        tabObj.nameLabel.TextColor3 = V2Palette.SubText
+    end
+
+    local originalAddGroup = tabObj.AddGroup
+    function tabObj:AddGroup(groupConfig)
+        local group = originalAddGroup(self, groupConfig)
+        styleGroup(group)
+        return group
+    end
+end
+
+local function styleSection(sectionObj)
+    if not sectionObj then
+        return
+    end
+
+    if sectionObj.mainFrame then
+        sectionObj.mainFrame.BackgroundColor3 = V2Palette.Surface
+        tintStroke(sectionObj.mainFrame, V2Palette.Border, 1.15)
+        tintCorners(sectionObj.mainFrame, 11)
+    end
+
+    local originalAddTab = sectionObj.AddTab
+    function sectionObj:AddTab(tabConfig)
+        local tab = originalAddTab(self, tabConfig)
+        styleTab(tab)
+        return tab
+    end
+end
+
+local function styleWindow(window)
+    if not window then
+        return
+    end
+
+    if window.mainFrameYay then
+        window.mainFrameYay.BackgroundColor3 = V2Palette.Background
+        tintCorners(window.mainFrameYay, 16)
+    end
+
+    if window.searchFrame then
+        window.searchFrame.BackgroundColor3 = V2Palette.Surface
+        tintStroke(window.searchFrame, V2Palette.Border, 1.05)
+    end
+
+    if window.uiSettingsButtonFrame then
+        window.uiSettingsButtonFrame.BackgroundColor3 = V2Palette.Surface
+        tintStroke(window.uiSettingsButtonFrame, V2Palette.Border, 1.1)
+    end
+
+    if window.uiSettingsPanelFrame then
+        window.uiSettingsPanelFrame.BackgroundColor3 = V2Palette.Secondary
+        tintStroke(window.uiSettingsPanelFrame, V2Palette.Border, 1.1)
+    end
+
+    if window.watermarkFrame then
+        window.watermarkFrame.BackgroundColor3 = V2Palette.Surface
+        tintCorners(window.watermarkFrame, 10)
+    end
+
+    if window.userNameLabel then
+        window.userNameLabel.TextColor3 = V2Palette.SubText
+    end
+
+    if window.tabDescriptionLabel then
+        window.tabDescriptionLabel.TextColor3 = V2Palette.SubText
+    end
+
+    if window.lineSeperator then
+        window.lineSeperator.BackgroundColor3 = V2Palette.Border
+    end
+
+    local originalCreateSection = window.CreateSection
+    function window:CreateSection(sectionConfig)
+        local section = originalCreateSection(self, sectionConfig)
+        styleSection(section)
+        return section
+    end
+end
+
+function BaseLibrary.new(config)
+    config = config or {}
+    config.Name = config.Name or "Flow // Source 2"
+    config.AccentColor = config.AccentColor or V2Palette.Accent
+    config.BackgroundColor = config.BackgroundColor or V2Palette.Background
+    config.SecondaryColor = config.SecondaryColor or V2Palette.Secondary
+    config.TextColor = config.TextColor or V2Palette.Text
+    config.SubTextColor = config.SubTextColor or V2Palette.SubText
+
+    local window = baseNew(config)
+    styleWindow(window)
+    return window
+end
+
+return BaseLibrary
