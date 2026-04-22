@@ -1,28 +1,67 @@
+local SELF_HOSTED_URL = "https://raw.githubusercontent.com/frvrfr20-blip/edede/refs/heads/main/eeeeeeeees"
+local BASE_SOURCE_URL = "https://raw.githubusercontent.com/0x1s2s/9xx38xx374723ui/refs/heads/main/eee"
+
 local function readBaseFlowUISource()
-    if readfile and isfile and isfile("flowuisource.lua") then
-        return readfile("flowuisource.lua")
+    local ok, hostedSource = pcall(function()
+        return game:HttpGet(SELF_HOSTED_URL)
+    end)
+
+    if ok and type(hostedSource) == "string" and hostedSource ~= "" and not hostedSource:find("readBaseFlowUISource", 1, true) then
+        return hostedSource
     end
 
-    return game:HttpGet("https://raw.githubusercontent.com/0x1s2s/9xx38xx374723ui/refs/heads/main/eee")
+    return game:HttpGet(BASE_SOURCE_URL)
 end
 
 local BaseLibrary = loadstring(readBaseFlowUISource())()
 local baseNew = BaseLibrary.new
+local TweenService = game:GetService("TweenService")
 
-local V2Palette = {
+local TextService = game:GetService("TextService")
+
+local Theme = {
     Accent = Color3.fromRGB(255, 87, 122),
     Background = Color3.fromRGB(17, 17, 22),
-    Secondary = Color3.fromRGB(23, 23, 30),
-    Surface = Color3.fromRGB(27, 27, 35),
+    Surface = Color3.fromRGB(23, 23, 30),
     SurfaceSoft = Color3.fromRGB(31, 31, 40),
-    Border = Color3.fromRGB(48, 48, 61),
+    SurfaceRaised = Color3.fromRGB(37, 37, 47),
+    Border = Color3.fromRGB(49, 49, 62),
+    BorderSoft = Color3.fromRGB(38, 38, 49),
     Text = Color3.fromRGB(246, 247, 251),
-    SubText = Color3.fromRGB(138, 141, 156),
-    Muted = Color3.fromRGB(104, 107, 122)
+    Muted = Color3.fromRGB(150, 152, 168),
+    SubText = Color3.fromRGB(106, 108, 125),
+    Hairline = Color3.fromRGB(42, 42, 54)
 }
 
+local Layout = {
+    WindowWidth = 1008,
+    WindowHeight = 560,
+    SidebarX = 28,
+    SidebarY = 120,
+    SidebarWidth = 72,
+    SidebarHeight = 404,
+    TabStripX = 148,
+    TabStripY = 104,
+    TabStripWidth = 430,
+    TabStripHeight = 54,
+    ContentX = 156,
+    ContentY = 154,
+    ContentWidth = 794,
+    ContentHeight = 334,
+    GroupWidth = 374,
+    GroupGap = 18
+}
+
+local function make(className, props)
+    local instance = Instance.new(className)
+    for property, value in pairs(props) do
+        instance[property] = value
+    end
+    return instance
+end
+
 local function findFirstChildOfClass(parent, className)
-    if not parent or not parent.GetChildren then
+    if not parent then
         return nil
     end
 
@@ -35,74 +74,1459 @@ local function findFirstChildOfClass(parent, className)
     return nil
 end
 
-local function tintStroke(target, color, thickness)
+local function setCorner(target, radius)
+    if not target then
+        return
+    end
+
+    local corner = findFirstChildOfClass(target, "UICorner")
+    if not corner then
+        corner = make("UICorner", {Parent = target})
+    end
+    corner.CornerRadius = UDim.new(0, radius)
+end
+
+local function setStroke(target, color, thickness, transparency)
+    if not target then
+        return
+    end
+
     local stroke = findFirstChildOfClass(target, "UIStroke")
-    if stroke then
-        stroke.Color = color
-        if thickness then
-            stroke.Thickness = thickness
+    if not stroke then
+        stroke = make("UIStroke", {Parent = target})
+    end
+    stroke.Color = color
+    stroke.Thickness = thickness or stroke.Thickness or 1
+    if transparency ~= nil then
+        stroke.Transparency = transparency
+    end
+end
+
+local function styleText(label, color, size)
+    if not label then
+        return
+    end
+
+    label.TextColor3 = color or label.TextColor3
+    if size then
+        label.TextSize = size
+    end
+    pcall(function()
+        label.Font = Enum.Font.GothamSemibold
+    end)
+end
+
+local function tween(instance, properties, duration)
+    if not instance or not instance.Parent then
+        return
+    end
+
+    pcall(function()
+        TweenService:Create(instance, TweenInfo.new(duration or 0.14, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), properties):Play()
+    end)
+end
+
+local function measureText(text, size)
+    local ok, bounds = pcall(function()
+        return TextService:GetTextSize(tostring(text or ""), size, Enum.Font.GothamSemibold, Vector2.new(1000, 1000))
+    end)
+
+    if ok and bounds then
+        return bounds.X
+    end
+
+    return math.max(60, (#tostring(text or "")) * math.max(6, math.floor(size * 0.52)))
+end
+
+local function registerRefresh(window, callback)
+    window._v2RefreshCallbacks = window._v2RefreshCallbacks or {}
+    table.insert(window._v2RefreshCallbacks, callback)
+end
+
+local function runRefresh(window)
+    for _, callback in ipairs(window._v2RefreshCallbacks or {}) do
+        pcall(callback)
+    end
+end
+
+local function clampFloatingFrame(window, frame, padding)
+    if not frame or frame._v2ClampBound then
+        return
+    end
+
+    frame._v2ClampBound = true
+    local inset = padding or 18
+
+    local function clampNow()
+        local main = window and (window._v2MainFrame or window.mainFrameYay)
+        if not main or not main.Parent or not frame.Parent then
+            return
+        end
+
+        local frameSize = frame.AbsoluteSize
+        local mainPos = main.AbsolutePosition
+        local mainSize = main.AbsoluteSize
+        if frameSize.X <= 0 or frameSize.Y <= 0 or mainSize.X <= 0 or mainSize.Y <= 0 then
+            return
+        end
+
+        local minX = mainPos.X + inset
+        local minY = mainPos.Y + inset
+        local maxX = math.max(minX, (mainPos.X + mainSize.X) - frameSize.X - inset)
+        local maxY = math.max(minY, (mainPos.Y + mainSize.Y) - frameSize.Y - inset)
+        local clampedX = math.floor(math.clamp(frame.AbsolutePosition.X, minX, maxX) + 0.5)
+        local clampedY = math.floor(math.clamp(frame.AbsolutePosition.Y, minY, maxY) + 0.5)
+
+        if frame.Position.X.Scale ~= 0 or frame.Position.Y.Scale ~= 0
+            or frame.Position.X.Offset ~= clampedX or frame.Position.Y.Offset ~= clampedY then
+            frame.Position = UDim2.fromOffset(clampedX, clampedY)
+        end
+    end
+
+    frame:GetPropertyChangedSignal("Position"):Connect(function()
+        task.defer(clampNow)
+    end)
+    frame:GetPropertyChangedSignal("Size"):Connect(function()
+        task.defer(clampNow)
+    end)
+    frame:GetPropertyChangedSignal("Visible"):Connect(function()
+        task.defer(clampNow)
+    end)
+
+    registerRefresh(window, function()
+        task.defer(clampNow)
+    end)
+    task.defer(clampNow)
+end
+
+local function bindAccent(window, instance, property)
+    registerRefresh(window, function()
+        if instance and instance.Parent then
+            instance[property or "BackgroundColor3"] = window.config.AccentColor
+        end
+    end)
+
+    if instance and instance.Parent then
+        instance[property or "BackgroundColor3"] = window.config.AccentColor
+    end
+end
+
+local function styleLabel(label)
+    if not label then
+        return
+    end
+
+    styleText(label, Theme.SubText, 12)
+    label.Position = UDim2.fromOffset(18, label.Position.Y.Offset)
+    label.Size = UDim2.fromOffset(Layout.GroupWidth - 36, label.Size.Y.Offset)
+    label.TextWrapped = label.TextWrapped or false
+    label.TextXAlignment = Enum.TextXAlignment.Left
+    label.TextYAlignment = Enum.TextYAlignment.Top
+end
+
+local function styleButton(button, window)
+    if not button or not button.mainFrame then
+        return
+    end
+
+    button.mainFrame.BackgroundColor3 = Theme.SurfaceSoft
+    button.mainFrame.Position = UDim2.fromOffset(18, button.mainFrame.Position.Y.Offset)
+    button.mainFrame.Size = UDim2.fromOffset(Layout.GroupWidth - 36, 36)
+    setCorner(button.mainFrame, 12)
+    setStroke(button.mainFrame, Theme.Border, 1)
+    styleText(button.labelText, Theme.Text, 14)
+
+    registerRefresh(window, function()
+        if button.mainFrame and button.mainFrame.Parent then
+            button.mainFrame.BackgroundColor3 = Theme.SurfaceSoft
+            setStroke(button.mainFrame, Theme.Border, 1)
+        end
+    end)
+end
+
+local function styleTextInput(input, window)
+    if not input then
+        return
+    end
+
+    styleText(input.labelText, Theme.Muted, 14)
+    input.labelText.Position = UDim2.fromOffset(18, input.labelText.Position.Y.Offset)
+    input.labelText.Size = UDim2.fromOffset(Layout.GroupWidth - 36, input.labelText.Size.Y.Offset)
+
+    input.inputFrame.BackgroundColor3 = Theme.SurfaceSoft
+    input.inputFrame.Position = UDim2.fromOffset(18, input.inputFrame.Position.Y.Offset)
+    input.inputFrame.Size = UDim2.fromOffset(Layout.GroupWidth - 36, 34)
+    setCorner(input.inputFrame, 12)
+    setStroke(input.inputFrame, Theme.Border, 1)
+
+    if input.textBox then
+        input.textBox.TextColor3 = Theme.Text
+        input.textBox.PlaceholderColor3 = Theme.SubText
+        input.textBox.TextSize = 13
+    end
+
+    registerRefresh(window, function()
+        if input.inputFrame and input.inputFrame.Parent then
+            input.inputFrame.BackgroundColor3 = Theme.SurfaceSoft
+            setStroke(input.inputFrame, Theme.Border, 1)
+        end
+    end)
+end
+
+local function styleToggle(toggle, window)
+    if not toggle then
+        return
+    end
+
+    styleText(toggle.labelText, Theme.Text, 15)
+    toggle.labelText.Position = UDim2.fromOffset(18, toggle.labelText.Position.Y.Offset)
+    toggle.labelText.Size = UDim2.fromOffset(Layout.GroupWidth - 132, 20)
+
+    toggle.switchFrame.Size = UDim2.fromOffset(54, 28)
+    toggle.switchFrame.Position = UDim2.new(1, -72, 0, toggle.labelText.Position.Y.Offset + 1)
+    setCorner(toggle.switchFrame, 14)
+
+    toggle.circleFrame.Size = UDim2.fromOffset(20, 20)
+    setCorner(toggle.circleFrame, 10)
+
+    local baseSet = toggle.Set
+    function toggle:Set(value, silent)
+        baseSet(self, value, silent)
+        self.switchFrame.Size = UDim2.fromOffset(54, 28)
+        self.switchFrame.Position = UDim2.new(1, -72, 0, self.labelText.Position.Y.Offset + 1)
+        self.switchFrame.BackgroundColor3 = self:Get() and self.Library.config.AccentColor or Theme.SurfaceSoft
+        self.circleFrame.Size = UDim2.fromOffset(20, 20)
+        self.circleFrame.Position = self:Get() and UDim2.new(1, -24, 0.5, -10) or UDim2.new(0, 4, 0.5, -10)
+        self.circleFrame.BackgroundColor3 = self:Get() and Color3.new(1, 1, 1) or Color3.fromRGB(96, 97, 112)
+    end
+
+    toggle:Set(toggle:Get(), true)
+    registerRefresh(window, function()
+        toggle:Set(toggle:Get(), true)
+    end)
+end
+
+local function styleSlider(slider, window)
+    if not slider then
+        return
+    end
+
+    styleText(slider.labelText, Theme.Muted, 14)
+    styleText(slider.valueLabelText, Theme.Text, 13)
+
+    slider.labelText.Position = UDim2.fromOffset(18, slider.labelText.Position.Y.Offset)
+    slider.labelText.Size = UDim2.fromOffset(Layout.GroupWidth - 170, 18)
+
+    slider.valueLabelText.Position = UDim2.fromOffset(Layout.GroupWidth - 104, slider.valueLabelText.Position.Y.Offset)
+    slider.valueLabelText.Size = UDim2.fromOffset(60, 18)
+
+    slider.backgroundFrame.Position = UDim2.fromOffset(Layout.GroupWidth - 166, slider.backgroundFrame.Position.Y.Offset)
+    slider.backgroundFrame.Size = UDim2.fromOffset(122, slider.backgroundFrame.Size.Y.Offset)
+    slider.trackFrame.Size = UDim2.fromOffset(122, slider.trackFrame.Size.Y.Offset)
+    slider.trackFrame.BackgroundColor3 = Theme.SurfaceSoft
+    slider.fillFrame.BackgroundColor3 = window.config.AccentColor
+    slider.knobFrame.Size = UDim2.fromOffset(12, 32)
+    slider.knobFrame.BackgroundColor3 = Color3.fromRGB(245, 245, 248)
+    setCorner(slider.knobFrame, 4)
+    setStroke(slider.knobFrame, Color3.fromRGB(245, 245, 248), 0)
+
+    local baseSet = slider.Set
+    function slider:Set(value, instant, silent)
+        baseSet(self, value, instant, silent)
+        self.backgroundFrame.Position = UDim2.fromOffset(Layout.GroupWidth - 166, self.backgroundFrame.Position.Y.Offset)
+        self.backgroundFrame.Size = UDim2.fromOffset(122, self.backgroundFrame.Size.Y.Offset)
+        self.trackFrame.Size = UDim2.fromOffset(122, self.trackFrame.Size.Y.Offset)
+        self.trackFrame.BackgroundColor3 = Theme.SurfaceSoft
+        self.fillFrame.BackgroundColor3 = self.Library.config.AccentColor
+        self.knobFrame.Size = UDim2.fromOffset(12, 32)
+        self.knobFrame.BackgroundColor3 = Color3.fromRGB(245, 245, 248)
+    end
+
+    slider:Set(slider:Get(), true, true)
+    registerRefresh(window, function()
+        slider:Set(slider:Get(), true, true)
+    end)
+end
+
+local function styleDropdown(dropdown, window)
+    if not dropdown then
+        return
+    end
+
+    styleText(dropdown.labelText, Theme.Muted, 14)
+    dropdown.labelText.Position = UDim2.fromOffset(18, dropdown.labelText.Position.Y.Offset)
+    dropdown.labelText.Size = UDim2.fromOffset(Layout.GroupWidth - 188, 18)
+
+    local function refreshButtonGeometry()
+        local width = math.clamp(math.max(112, measureText(dropdown.selectedLabelText and dropdown.selectedLabelText.Text, 12) + 34), 112, 154)
+        dropdown.buttonFrame.Size = UDim2.fromOffset(width, 30)
+        dropdown.buttonFrame.Position = UDim2.new(1, -width - 18, 0, dropdown.labelText.Position.Y.Offset - 2)
+    end
+
+    dropdown.buttonFrame.BackgroundColor3 = Theme.SurfaceSoft
+    refreshButtonGeometry()
+    setCorner(dropdown.buttonFrame, 10)
+    setStroke(dropdown.buttonFrame, Theme.Border, 1)
+    styleText(dropdown.selectedLabelText, Theme.Text, 13)
+
+    if dropdown.arrowImg then
+        dropdown.arrowImg.ImageColor3 = Theme.Muted
+    end
+
+    if dropdown.optionHolderFrame then
+        dropdown.optionHolderFrame.BackgroundColor3 = Theme.Surface
+        setCorner(dropdown.optionHolderFrame, 18)
+        setStroke(dropdown.optionHolderFrame, Theme.Border, 1.1)
+        clampFloatingFrame(window, dropdown.optionHolderFrame, 20)
+
+        for _, child in ipairs(dropdown.optionHolderFrame:GetDescendants()) do
+            if child:IsA("TextLabel") then
+                if child.Parent == dropdown.optionHolderFrame then
+                    styleText(child, Theme.Text, 14)
+                elseif child ~= dropdown.selectedLabelText then
+                    styleText(child, Theme.Muted, 13)
+                end
+            elseif child:IsA("TextButton") and child.Text == "X" then
+                child.BackgroundColor3 = Theme.SurfaceSoft
+                child.TextColor3 = Theme.Muted
+                setCorner(child, 9)
+                setStroke(child, Theme.Border, 1)
+            end
+        end
+    end
+
+    local baseSet = dropdown.Set
+    function dropdown:Set(value, silent)
+        baseSet(self, value, silent)
+        self.buttonFrame.BackgroundColor3 = Theme.SurfaceSoft
+        setStroke(self.buttonFrame, Theme.Border, 1)
+        styleText(self.selectedLabelText, Theme.Text, 13)
+        refreshButtonGeometry()
+    end
+
+    dropdown:Set(dropdown:Get(), true)
+    registerRefresh(window, function()
+        dropdown:Set(dropdown:Get(), true)
+    end)
+end
+
+local function styleColorPicker(colorPicker, window)
+    if not colorPicker then
+        return
+    end
+
+    styleText(colorPicker.labelText, Theme.Muted, 14)
+    colorPicker.labelText.Position = UDim2.fromOffset(18, colorPicker.labelText.Position.Y.Offset)
+    colorPicker.labelText.Size = UDim2.fromOffset(Layout.GroupWidth - 120, 18)
+
+    colorPicker.colorPreview.Position = UDim2.new(1, -52, 0, colorPicker.labelText.Position.Y.Offset - 1)
+    colorPicker.colorPreview.Size = UDim2.fromOffset(32, 22)
+    setCorner(colorPicker.colorPreview, 8)
+    setStroke(colorPicker.colorPreview, Theme.Border, 1)
+
+    if colorPicker.pickerHolder then
+        colorPicker.pickerHolder.BackgroundColor3 = Theme.Surface
+        setCorner(colorPicker.pickerHolder, 22)
+        setStroke(colorPicker.pickerHolder, Theme.Border, 1.1)
+        clampFloatingFrame(window, colorPicker.pickerHolder, 20)
+    end
+
+    registerRefresh(window, function()
+        if colorPicker.colorPreview and colorPicker.colorPreview.Parent then
+            setStroke(colorPicker.colorPreview, Theme.Border, 1)
+        end
+        if colorPicker.pickerHolder and colorPicker.pickerHolder.Parent then
+            colorPicker.pickerHolder.BackgroundColor3 = Theme.Surface
+            setStroke(colorPicker.pickerHolder, Theme.Border, 1.1)
+        end
+    end)
+end
+
+local function styleKeybind(keybind, window)
+    if not keybind or not keybind.buttonFrame then
+        return
+    end
+
+    styleText(keybind.labelText, Theme.Muted, 14)
+    keybind.labelText.Position = UDim2.fromOffset(18, keybind.labelText.Position.Y.Offset)
+    keybind.labelText.Size = UDim2.fromOffset(Layout.GroupWidth - 190, 18)
+
+    local function refreshButtonGeometry(textOverride)
+        local displayText = tostring(textOverride or (keybind.keyLabelText and keybind.keyLabelText.Text) or "None")
+        local width = math.clamp(math.max(92, measureText(displayText, 12) + 38), 92, 144)
+        keybind.buttonFrame.Size = UDim2.fromOffset(width, 30)
+        keybind.buttonFrame.Position = UDim2.new(1, -width - 18, 0, keybind.labelText.Position.Y.Offset - 2)
+    end
+
+    keybind.buttonFrame.BackgroundColor3 = Theme.SurfaceSoft
+    setCorner(keybind.buttonFrame, 11)
+    setStroke(keybind.buttonFrame, Theme.Border, 1)
+    refreshButtonGeometry()
+
+    if keybind.keyLabelText then
+        styleText(keybind.keyLabelText, Theme.Text, 12)
+    end
+    if keybind.keyboardIconImg then
+        keybind.keyboardIconImg.ImageColor3 = Theme.SubText
+    end
+
+    if keybind.modeMenuFrame then
+        keybind.modeMenuFrame.BackgroundColor3 = Theme.Surface
+        setCorner(keybind.modeMenuFrame, 18)
+        setStroke(keybind.modeMenuFrame, Theme.Border, 1.1)
+        clampFloatingFrame(window, keybind.modeMenuFrame, 20)
+
+        for _, child in ipairs(keybind.modeMenuFrame:GetDescendants()) do
+            if child:IsA("TextLabel") then
+                styleText(child, child.Text == "Keybind Mode" and Theme.Text or Theme.Muted, child.Text == "Keybind Mode" and 13 or 12)
+            elseif child:IsA("Frame") and child ~= keybind.modeMenuFrame then
+                setCorner(child, 10)
+                setStroke(child, Theme.Border, 1)
+            end
+        end
+    end
+
+    local baseSet = keybind.Set
+    function keybind:Set(value, silent)
+        baseSet(self, value, silent)
+        self.buttonFrame.BackgroundColor3 = Theme.SurfaceSoft
+        setStroke(self.buttonFrame, Theme.Border, 1)
+        if self.keyLabelText then
+            styleText(self.keyLabelText, Theme.Text, 12)
+        end
+        if self.keyboardIconImg then
+            self.keyboardIconImg.ImageColor3 = Theme.SubText
+        end
+        refreshButtonGeometry()
+    end
+
+    if type(keybind.SetMode) == "function" then
+        local baseSetMode = keybind.SetMode
+        function keybind:SetMode(modeValue, silent)
+            baseSetMode(self, modeValue, silent)
+            if self.modeMenuFrame then
+                self.modeMenuFrame.BackgroundColor3 = Theme.Surface
+                setStroke(self.modeMenuFrame, Theme.Border, 1.1)
+            end
+        end
+    end
+
+    keybind:Set(keybind:Get(), true)
+    registerRefresh(window, function()
+        keybind:Set(keybind:Get(), true)
+        if keybind.modeMenuFrame and keybind.modeMenuFrame.Parent then
+            keybind.modeMenuFrame.BackgroundColor3 = Theme.Surface
+            setStroke(keybind.modeMenuFrame, Theme.Border, 1.1)
+        end
+    end)
+end
+
+local function styleKeybindToggle(keybindToggle, window)
+    if not keybindToggle or not keybindToggle.keybindButtonFrame then
+        return
+    end
+
+    styleText(keybindToggle.labelText, Theme.Muted, 14)
+    keybindToggle.labelText.Position = UDim2.fromOffset(18, keybindToggle.labelText.Position.Y.Offset)
+    keybindToggle.labelText.Size = UDim2.fromOffset(Layout.GroupWidth - 244, 18)
+
+    local function refreshGeometry(textOverride)
+        local displayText = tostring(textOverride or (keybindToggle.keyLabelText and keybindToggle.keyLabelText.Text) or "None")
+        local width = math.clamp(math.max(92, measureText(displayText, 12) + 38), 92, 142)
+        keybindToggle.keybindButtonFrame.Size = UDim2.fromOffset(width, 30)
+        keybindToggle.keybindButtonFrame.Position = UDim2.new(1, -width - 18, 0, keybindToggle.labelText.Position.Y.Offset - 2)
+        if keybindToggle.toggleSwitchFrame then
+            keybindToggle.toggleSwitchFrame.Size = UDim2.fromOffset(54, 28)
+            keybindToggle.toggleSwitchFrame.Position = UDim2.new(1, -width - 82, 0, keybindToggle.labelText.Position.Y.Offset - 1)
+        end
+    end
+
+    local function refreshToggleVisuals()
+        if not keybindToggle.toggleSwitchFrame or not keybindToggle.toggleCircleFrame then
+            return
+        end
+
+        local enabled = keybindToggle:GetToggle()
+        keybindToggle.toggleSwitchFrame.BackgroundColor3 = enabled and keybindToggle.Library.config.AccentColor or Theme.SurfaceSoft
+        keybindToggle.toggleCircleFrame.Size = UDim2.fromOffset(20, 20)
+        keybindToggle.toggleCircleFrame.Position = enabled and UDim2.new(1, -24, 0.5, -10) or UDim2.new(0, 4, 0.5, -10)
+        keybindToggle.toggleCircleFrame.BackgroundColor3 = enabled and Color3.new(1, 1, 1) or Color3.fromRGB(96, 97, 112)
+    end
+
+    keybindToggle.keybindButtonFrame.BackgroundColor3 = Theme.SurfaceSoft
+    setCorner(keybindToggle.keybindButtonFrame, 11)
+    setStroke(keybindToggle.keybindButtonFrame, Theme.Border, 1)
+    if keybindToggle.keyLabelText then
+        styleText(keybindToggle.keyLabelText, Theme.Text, 12)
+    end
+    if keybindToggle.keyboardIconImg then
+        keybindToggle.keyboardIconImg.ImageColor3 = Theme.SubText
+    end
+    if keybindToggle.toggleSwitchFrame then
+        setCorner(keybindToggle.toggleSwitchFrame, 14)
+    end
+    if keybindToggle.toggleCircleFrame then
+        setCorner(keybindToggle.toggleCircleFrame, 10)
+    end
+
+    local baseSetKey = keybindToggle.SetKey
+    function keybindToggle:SetKey(key, silent)
+        baseSetKey(self, key, silent)
+        self.keybindButtonFrame.BackgroundColor3 = Theme.SurfaceSoft
+        setStroke(self.keybindButtonFrame, Theme.Border, 1)
+        if self.keyLabelText then
+            styleText(self.keyLabelText, Theme.Text, 12)
+        end
+        refreshGeometry()
+    end
+
+    local baseSetToggle = keybindToggle.SetToggle
+    function keybindToggle:SetToggle(value, silent)
+        baseSetToggle(self, value, silent)
+        refreshToggleVisuals()
+        refreshGeometry()
+    end
+
+    keybindToggle:SetKey(keybindToggle:GetKey(), true)
+    keybindToggle:SetToggle(keybindToggle:GetToggle(), true)
+    registerRefresh(window, function()
+        keybindToggle:SetKey(keybindToggle:GetKey(), true)
+        keybindToggle:SetToggle(keybindToggle:GetToggle(), true)
+    end)
+end
+
+local function styleMultiDropdown(multiDropdown, window)
+    if not multiDropdown or not multiDropdown.buttonFrame then
+        return
+    end
+
+    styleText(multiDropdown.labelText, Theme.Muted, 14)
+    multiDropdown.labelText.Position = UDim2.fromOffset(18, multiDropdown.labelText.Position.Y.Offset)
+    multiDropdown.labelText.Size = UDim2.fromOffset(Layout.GroupWidth - 188, 18)
+
+    local function refreshButtonGeometry()
+        local displayText = tostring((multiDropdown.selectedLabelText and multiDropdown.selectedLabelText.Text) or "None")
+        local width = math.clamp(math.max(112, measureText(displayText, 12) + 38), 112, 162)
+        multiDropdown.buttonFrame.Size = UDim2.fromOffset(width, 30)
+        multiDropdown.buttonFrame.Position = UDim2.new(1, -width - 18, 0, multiDropdown.labelText.Position.Y.Offset - 2)
+    end
+
+    multiDropdown.buttonFrame.BackgroundColor3 = Theme.SurfaceSoft
+    setCorner(multiDropdown.buttonFrame, 11)
+    setStroke(multiDropdown.buttonFrame, Theme.Border, 1)
+    if multiDropdown.selectedLabelText then
+        styleText(multiDropdown.selectedLabelText, Theme.Text, 12)
+    end
+    if multiDropdown.arrowImg then
+        multiDropdown.arrowImg.ImageColor3 = Theme.Muted
+    end
+
+    if multiDropdown.optionHolderFrame then
+        multiDropdown.optionHolderFrame.BackgroundColor3 = Theme.Surface
+        setCorner(multiDropdown.optionHolderFrame, 18)
+        setStroke(multiDropdown.optionHolderFrame, Theme.Border, 1.1)
+        clampFloatingFrame(window, multiDropdown.optionHolderFrame, 20)
+
+        for _, child in ipairs(multiDropdown.optionHolderFrame:GetDescendants()) do
+            if child:IsA("TextLabel") then
+                if child.Parent == multiDropdown.optionHolderFrame then
+                    styleText(child, Theme.Text, 14)
+                elseif child ~= multiDropdown.selectedLabelText then
+                    styleText(child, Theme.Muted, 13)
+                end
+            elseif child:IsA("TextButton") and child.Text == "X" then
+                child.BackgroundColor3 = Theme.SurfaceSoft
+                child.TextColor3 = Theme.Muted
+                setCorner(child, 9)
+                setStroke(child, Theme.Border, 1)
+            elseif child:IsA("ScrollingFrame") then
+                child.ScrollBarThickness = 0
+            end
+        end
+    end
+
+    local baseSet = multiDropdown.Set
+    function multiDropdown:Set(values, silent)
+        baseSet(self, values, silent)
+        self.buttonFrame.BackgroundColor3 = Theme.SurfaceSoft
+        setStroke(self.buttonFrame, Theme.Border, 1)
+        if self.selectedLabelText then
+            styleText(self.selectedLabelText, Theme.Text, 12)
+        end
+        refreshButtonGeometry()
+    end
+
+    if type(multiDropdown.UpdateOptions) == "function" then
+        local baseUpdateOptions = multiDropdown.UpdateOptions
+        function multiDropdown:UpdateOptions(newOptions)
+            baseUpdateOptions(self, newOptions)
+            refreshButtonGeometry()
+        end
+    end
+
+    multiDropdown:Set(multiDropdown:Get(), true)
+    registerRefresh(window, function()
+        multiDropdown:Set(multiDropdown:Get(), true)
+        if multiDropdown.optionHolderFrame and multiDropdown.optionHolderFrame.Parent then
+            multiDropdown.optionHolderFrame.BackgroundColor3 = Theme.Surface
+            setStroke(multiDropdown.optionHolderFrame, Theme.Border, 1.1)
+        end
+    end)
+end
+
+local function styleNotification(notificationFrame, window, config)
+    if not notificationFrame then
+        return
+    end
+
+    notificationFrame.BackgroundColor3 = Theme.Surface
+    setCorner(notificationFrame, 16)
+    setStroke(notificationFrame, Theme.BorderSoft, 1.1)
+
+    for _, child in ipairs(notificationFrame:GetChildren()) do
+        if child:IsA("TextLabel") then
+            local isTitle = tostring(child.Text) == tostring((config and config.Title) or "")
+            styleText(child, isTitle and Theme.Text or Theme.SubText, isTitle and 15 or 12)
+        elseif child:IsA("ImageLabel") and child.Name == "NotifGlow" then
+            child.ImageTransparency = 0.9
+            bindAccent(window, child, "ImageColor3")
+        elseif child:IsA("Frame") then
+            if child.Size.X.Offset <= 6 and child.Size.Y.Scale == 1 then
+                bindAccent(window, child)
+            elseif child.Position.Y.Scale == 1 and child.Size.Y.Offset <= 4 then
+                child.BackgroundColor3 = Theme.SurfaceSoft
+                for _, grandChild in ipairs(child:GetChildren()) do
+                    if grandChild:IsA("Frame") then
+                        bindAccent(window, grandChild)
+                    end
+                end
+            elseif child.Size.X.Offset <= 36 and child.Size.Y.Offset <= 36 then
+                child.BackgroundColor3 = Theme.SurfaceSoft
+                setCorner(child, 14)
+                setStroke(child, Theme.Border, 1)
+            end
         end
     end
 end
 
-local function tintCorners(target, offset)
-    local corner = findFirstChildOfClass(target, "UICorner")
-    if corner then
-        corner.CornerRadius = UDim.new(0, offset)
-    end
-end
-
-local function styleGroup(groupObj)
-    if not groupObj or not groupObj.mainFrame then
+local function patchGroup(group, window)
+    if not group or group._v2Patched then
         return
     end
 
-    groupObj.mainFrame.BackgroundColor3 = V2Palette.Secondary
-    tintStroke(groupObj.mainFrame, V2Palette.Border, 1.15)
-    tintCorners(groupObj.mainFrame, 14)
+    group._v2Patched = true
+    group.mainFrame.BackgroundColor3 = Theme.Surface
+    group.mainFrame.ClipsDescendants = true
+    group.mainFrame.Size = UDim2.fromOffset(Layout.GroupWidth, group.mainFrame.Size.Y.Offset)
+    setCorner(group.mainFrame, 24)
+    setStroke(group.mainFrame, Theme.BorderSoft, 1.1)
+
+    for _, child in ipairs(group.mainFrame:GetChildren()) do
+        if child:IsA("ImageLabel") then
+            child.Visible = false
+        elseif child:IsA("TextLabel") and child.Text == group.groupNameForSearch then
+            styleText(child, Theme.Muted, 14)
+            child.Position = UDim2.fromOffset(18, 15)
+            child.Size = UDim2.fromOffset(Layout.GroupWidth - 36, 18)
+        end
+    end
+
+    local baseAddToggle = group.AddToggle
+    function group:AddToggle(config)
+        local control = baseAddToggle(self, config)
+        self.mainFrame.Size = UDim2.fromOffset(Layout.GroupWidth, self.mainFrame.Size.Y.Offset)
+        styleToggle(control, window)
+        return control
+    end
+
+    local baseAddSlider = group.AddSlider
+    function group:AddSlider(config)
+        local control = baseAddSlider(self, config)
+        self.mainFrame.Size = UDim2.fromOffset(Layout.GroupWidth, self.mainFrame.Size.Y.Offset)
+        styleSlider(control, window)
+        return control
+    end
+
+    local baseAddDropdown = group.AddDropdown
+    function group:AddDropdown(config)
+        local control = baseAddDropdown(self, config)
+        self.mainFrame.Size = UDim2.fromOffset(Layout.GroupWidth, self.mainFrame.Size.Y.Offset)
+        styleDropdown(control, window)
+        return control
+    end
+
+    local baseAddButton = group.AddButton
+    function group:AddButton(config)
+        local control = baseAddButton(self, config)
+        self.mainFrame.Size = UDim2.fromOffset(Layout.GroupWidth, self.mainFrame.Size.Y.Offset)
+        styleButton(control, window)
+        return control
+    end
+
+    local baseAddLabel = group.AddLabel
+    function group:AddLabel(config)
+        local label = baseAddLabel(self, config)
+        self.mainFrame.Size = UDim2.fromOffset(Layout.GroupWidth, self.mainFrame.Size.Y.Offset)
+        styleLabel(label)
+        return label
+    end
+
+    local baseAddTextInput = group.AddTextInput
+    function group:AddTextInput(config)
+        local control = baseAddTextInput(self, config)
+        self.mainFrame.Size = UDim2.fromOffset(Layout.GroupWidth, self.mainFrame.Size.Y.Offset)
+        styleTextInput(control, window)
+        return control
+    end
+
+    if type(group.AddTextbox) == "function" then
+        local baseAddTextbox = group.AddTextbox
+        function group:AddTextbox(config)
+            local control = baseAddTextbox(self, config)
+            self.mainFrame.Size = UDim2.fromOffset(Layout.GroupWidth, self.mainFrame.Size.Y.Offset)
+            styleTextInput(control, window)
+            return control
+        end
+    end
+
+    if type(group.AddTextBox) == "function" then
+        local baseAddTextBox = group.AddTextBox
+        function group:AddTextBox(config)
+            local control = baseAddTextBox(self, config)
+            self.mainFrame.Size = UDim2.fromOffset(Layout.GroupWidth, self.mainFrame.Size.Y.Offset)
+            styleTextInput(control, window)
+            return control
+        end
+    end
+
+    local baseAddColorPicker = group.AddColorPicker
+    function group:AddColorPicker(config)
+        local control = baseAddColorPicker(self, config)
+        self.mainFrame.Size = UDim2.fromOffset(Layout.GroupWidth, self.mainFrame.Size.Y.Offset)
+        styleColorPicker(control, window)
+        return control
+    end
+
+    if type(group.AddKeybind) == "function" then
+        local baseAddKeybind = group.AddKeybind
+        function group:AddKeybind(config)
+            local control = baseAddKeybind(self, config)
+            self.mainFrame.Size = UDim2.fromOffset(Layout.GroupWidth, self.mainFrame.Size.Y.Offset)
+            styleKeybind(control, window)
+            return control
+        end
+    end
+
+    if type(group.AddKeybindToggle) == "function" then
+        local baseAddKeybindToggle = group.AddKeybindToggle
+        function group:AddKeybindToggle(config)
+            local control = baseAddKeybindToggle(self, config)
+            self.mainFrame.Size = UDim2.fromOffset(Layout.GroupWidth, self.mainFrame.Size.Y.Offset)
+            styleKeybindToggle(control, window)
+            return control
+        end
+    end
+
+    if type(group.AddMultiDropdown) == "function" then
+        local baseAddMultiDropdown = group.AddMultiDropdown
+        function group:AddMultiDropdown(config)
+            local control = baseAddMultiDropdown(self, config)
+            self.mainFrame.Size = UDim2.fromOffset(Layout.GroupWidth, self.mainFrame.Size.Y.Offset)
+            styleMultiDropdown(control, window)
+            return control
+        end
+    end
 end
 
-local function styleTab(tabObj)
-    if not tabObj then
+local function resizeTabColumns(tab)
+    if not tab then
         return
     end
 
-    if tabObj.buttonFrame then
-        tabObj.buttonFrame.BackgroundColor3 = V2Palette.Surface
-        tintCorners(tabObj.buttonFrame, 12)
+    if tab.leftColumnFrame then
+        tab.leftColumnFrame.Size = UDim2.fromOffset(Layout.GroupWidth, 1400)
     end
 
-    if tabObj.iconImg and not tabObj.isActive then
-        tabObj.iconImg.ImageColor3 = V2Palette.Muted
+    if tab.rightColumnFrame then
+        tab.rightColumnFrame.Position = UDim2.fromOffset(Layout.GroupWidth + Layout.GroupGap, 0)
+        tab.rightColumnFrame.Size = UDim2.fromOffset(Layout.GroupWidth, 1400)
     end
 
-    if tabObj.nameLabel and not tabObj.isActive then
-        tabObj.nameLabel.TextColor3 = V2Palette.SubText
+    if tab.contentScroll then
+        tab.contentScroll.CanvasSize = UDim2.fromOffset((Layout.GroupWidth * 2) + Layout.GroupGap, tab.contentScroll.CanvasSize.Y.Offset)
+        tab.contentScroll.ScrollBarThickness = 0
+        tab.contentScroll.BackgroundTransparency = 1
+    end
+end
+
+local function refreshSidebarStates(window)
+    for _, section in ipairs(window._v2Sections or {}) do
+        local active = section == window._v2ActiveSection
+        if section._v2SidebarButton then
+            section._v2SidebarButton.BackgroundTransparency = active and 0 or 1
+            section._v2SidebarButton.BackgroundColor3 = active and Theme.SurfaceSoft or Theme.Surface
+        end
+        if section._v2SidebarIcon then
+            section._v2SidebarIcon.ImageColor3 = active and Theme.Text or Theme.Muted
+        end
+        if section._v2SidebarAccent then
+            section._v2SidebarAccent.Visible = active
+        end
+        if section._v2SidebarGlow then
+            section._v2SidebarGlow.ImageTransparency = active and 0.82 or 1
+        end
+    end
+end
+
+local function refreshTabStates(window)
+    for _, section in ipairs(window._v2Sections or {}) do
+        for _, tab in ipairs(section._v2Tabs or {}) do
+            local visible = section == window._v2ActiveSection
+            if tab._v2TabButton then
+                tab._v2TabButton.Visible = visible
+                if visible then
+                    local active = window.currentTabYay == tab
+                    tab._v2TabButton.BackgroundColor3 = active and Theme.SurfaceRaised or Theme.Surface
+                    if tab._v2TabButtonLabel then
+                        tab._v2TabButtonLabel.TextColor3 = active and Theme.Text or Theme.Muted
+                    end
+                end
+            end
+        end
+    end
+end
+
+local function activateSection(window, section, skipTabActivation)
+    if not section then
+        return
     end
 
-    local originalAddGroup = tabObj.AddGroup
-    function tabObj:AddGroup(groupConfig)
-        local group = originalAddGroup(self, groupConfig)
-        styleGroup(group)
+    window._v2ActiveSection = section
+    refreshSidebarStates(window)
+    refreshTabStates(window)
+
+    if not skipTabActivation then
+        local tab = section._v2LastActiveTab or section._v2Tabs[1]
+        if tab then
+            tab:Activate()
+        end
+    end
+end
+
+local function activateTab(window, tab)
+    if not tab then
+        return
+    end
+
+    local section = tab._v2Section
+    if section then
+        window._v2ActiveSection = section
+        section._v2LastActiveTab = tab
+    end
+
+    refreshSidebarStates(window)
+    refreshTabStates(window)
+end
+
+local function createSidebarButton(window, section, iconId)
+    if not window._v2SidebarHolder or section._v2SidebarButton then
+        return
+    end
+
+    local button = make("TextButton", {
+        AutoButtonColor = false,
+        BackgroundColor3 = Theme.Surface,
+        BackgroundTransparency = 1,
+        BorderSizePixel = 0,
+        Size = UDim2.fromOffset(52, 48),
+        Text = "",
+        Parent = window._v2SidebarHolder
+    })
+    setCorner(button, 18)
+
+    local glow = make("ImageLabel", {
+        BackgroundTransparency = 1,
+        Image = "rbxassetid://5028857084",
+        ImageColor3 = window.config.AccentColor,
+        ImageTransparency = 1,
+        Position = UDim2.new(0.5, 0, 0.5, 0),
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Size = UDim2.fromOffset(88, 88),
+        ZIndex = 0,
+        Parent = button
+    })
+    bindAccent(window, glow, "ImageColor3")
+
+    local accentBar = make("Frame", {
+        BackgroundColor3 = window.config.AccentColor,
+        BorderSizePixel = 0,
+        Position = UDim2.fromOffset(45, 12),
+        Size = UDim2.fromOffset(4, 22),
+        Visible = false,
+        Parent = button
+    })
+    setCorner(accentBar, 2)
+    bindAccent(window, accentBar)
+
+    local icon = make("ImageLabel", {
+        BackgroundTransparency = 1,
+        Image = tostring(iconId or "rbxassetid://98092584632154"),
+        ImageColor3 = Theme.Muted,
+        Position = UDim2.new(0.5, -10, 0.5, -10),
+        Size = UDim2.fromOffset(22, 22),
+        Parent = button
+    })
+
+    button.MouseButton1Click:Connect(function()
+        activateSection(window, section, false)
+    end)
+    button.MouseEnter:Connect(function()
+        if window._v2ActiveSection ~= section then
+            tween(button, {BackgroundTransparency = 0.22, BackgroundColor3 = Theme.SurfaceSoft}, 0.12)
+            tween(icon, {ImageColor3 = Color3.fromRGB(212, 214, 224)}, 0.12)
+        end
+    end)
+    button.MouseLeave:Connect(function()
+        if window._v2ActiveSection ~= section then
+            tween(button, {BackgroundTransparency = 1, BackgroundColor3 = Theme.Surface}, 0.12)
+            tween(icon, {ImageColor3 = Theme.Muted}, 0.12)
+        end
+    end)
+
+    section._v2SidebarButton = button
+    section._v2SidebarIcon = icon
+    section._v2SidebarAccent = accentBar
+    section._v2SidebarGlow = glow
+end
+
+local function createTabButton(window, section, tab, tabConfig)
+    if not window._v2TabHolder or tab._v2TabButton then
+        return
+    end
+
+    local text = tostring((tabConfig and tabConfig.Name) or tab.tabNameForSearch or "Tab")
+    local width = math.clamp(measureText(text, 14) + 44, 102, 150)
+    local button = make("TextButton", {
+        AutoButtonColor = false,
+        BackgroundColor3 = Theme.Surface,
+        BorderSizePixel = 0,
+        Size = UDim2.fromOffset(width, 38),
+        Text = "",
+        Visible = false,
+        Parent = window._v2TabHolder
+    })
+    setCorner(button, 18)
+
+    local label = make("TextLabel", {
+        BackgroundTransparency = 1,
+        Text = text,
+        TextColor3 = Theme.Muted,
+        TextSize = 14,
+        Font = Enum.Font.GothamSemibold,
+        Size = UDim2.new(1, -20, 1, 0),
+        Position = UDim2.fromOffset(10, 0),
+        TextXAlignment = Enum.TextXAlignment.Center,
+        Parent = button
+    })
+
+    button.MouseButton1Click:Connect(function()
+        tab:Activate()
+    end)
+    button.MouseEnter:Connect(function()
+        if window.currentTabYay ~= tab then
+            tween(button, {BackgroundColor3 = Theme.SurfaceSoft}, 0.12)
+            tween(label, {TextColor3 = Color3.fromRGB(214, 216, 225)}, 0.12)
+        end
+    end)
+    button.MouseLeave:Connect(function()
+        if window.currentTabYay ~= tab then
+            tween(button, {BackgroundColor3 = Theme.Surface}, 0.12)
+            tween(label, {TextColor3 = Theme.Muted}, 0.12)
+        end
+    end)
+
+    tab._v2TabButton = button
+    tab._v2TabButtonLabel = label
+    tab._v2Section = section
+end
+
+local function styleSettingsPanel(window, triggerButton)
+    local panel = window.uiSettingsPanelFrame
+    if not panel or panel._v2Styled then
+        return
+    end
+
+    panel._v2Styled = true
+    panel.AnchorPoint = Vector2.new(0, 0)
+    panel.Position = UDim2.fromOffset(Layout.WindowWidth - 220, 86)
+    panel.Size = UDim2.fromOffset(192, 0)
+    panel.BackgroundColor3 = Theme.Surface
+    panel.ClipsDescendants = true
+    setCorner(panel, 20)
+    setStroke(panel, Theme.Border, 1.1)
+
+    local targetHeight = 240
+    for _, child in ipairs(panel:GetChildren()) do
+        if child:IsA("GuiObject") then
+            targetHeight = math.max(targetHeight, child.Position.Y.Offset + child.Size.Y.Offset + 14)
+        end
+        if child:IsA("TextLabel") then
+            styleText(child, child.Text == "UI Tweaks" and Theme.Text or Theme.Muted, child.Text == "UI Tweaks" and 13 or 12)
+        elseif child:IsA("Frame") and child ~= panel then
+            if child.Size.X.Offset <= 18 and child.Size.Y.Offset <= 18 then
+                setStroke(child, Theme.Border, 1)
+            elseif child.Size.X.Offset <= 36 and child.Size.Y.Offset <= 18 then
+                setCorner(child, 10)
+            end
+        end
+    end
+
+    if window.uiAccentPreviewFrame then
+        bindAccent(window, window.uiAccentPreviewFrame)
+    end
+    clampFloatingFrame(window, panel, 18)
+
+    local function setOpen(openState)
+        window.uiSettingsOpen = openState == true
+        if window.uiSettingsOpen then
+            panel.Visible = true
+            tween(panel, {Size = UDim2.fromOffset(192, targetHeight)}, 0.18)
+            if triggerButton then
+                tween(triggerButton, {BackgroundColor3 = Theme.SurfaceSoft}, 0.14)
+            end
+        else
+            tween(panel, {Size = UDim2.fromOffset(192, 0)}, 0.16)
+            if triggerButton then
+                tween(triggerButton, {BackgroundColor3 = Theme.Surface}, 0.14)
+            end
+            task.delay(0.16, function()
+                if panel and panel.Parent and not window.uiSettingsOpen then
+                    panel.Visible = false
+                end
+            end)
+        end
+    end
+
+    if triggerButton then
+        triggerButton.MouseButton1Click:Connect(function()
+            setOpen(not window.uiSettingsOpen)
+        end)
+        triggerButton.MouseEnter:Connect(function()
+            if not window.uiSettingsOpen then
+                tween(triggerButton, {BackgroundColor3 = Theme.SurfaceSoft}, 0.12)
+            end
+        end)
+        triggerButton.MouseLeave:Connect(function()
+            if not window.uiSettingsOpen then
+                tween(triggerButton, {BackgroundColor3 = Theme.Surface}, 0.12)
+            end
+        end)
+    end
+
+    registerRefresh(window, function()
+        panel.BackgroundColor3 = Theme.Surface
+        setStroke(panel, Theme.Border, 1.1)
+        if window.uiAccentPreviewFrame and window.uiAccentPreviewFrame.Parent then
+            window.uiAccentPreviewFrame.BackgroundColor3 = window.config.AccentColor
+        end
+    end)
+end
+
+local function buildShell(window)
+    local main = window.mainFrameYay
+    if not main or window._v2ShellBuilt then
+        return
+    end
+
+    window._v2ShellBuilt = true
+    window._v2MainFrame = main
+    main.ClipsDescendants = true
+    main.BackgroundColor3 = Theme.Background
+    main.Size = UDim2.fromOffset(Layout.WindowWidth, Layout.WindowHeight)
+    main.Position = UDim2.new(0.5, -(Layout.WindowWidth * 0.5), 0.5, -(Layout.WindowHeight * 0.5))
+    setCorner(main, 34)
+
+    if window.mainBackgroundEffectsFrame then
+        window.mainBackgroundEffectsFrame.BackgroundTransparency = 0.22
+        window.mainBackgroundEffectsFrame.BackgroundColor3 = Theme.Background
+    end
+
+    if window.mainBackgroundGradient then
+        window.mainBackgroundGradient.Color = ColorSequence.new({
+            ColorSequenceKeypoint.new(0, Color3.fromRGB(20, 20, 25)),
+            ColorSequenceKeypoint.new(0.5, Color3.fromRGB(17, 17, 22)),
+            ColorSequenceKeypoint.new(1, Color3.fromRGB(21, 21, 28))
+        })
+    end
+
+    if window.mainBackgroundAccentGlow then
+        window.mainBackgroundAccentGlow.ImageTransparency = 0.93
+        window.mainBackgroundAccentGlow.Size = UDim2.new(1.25, 0, 1.25, 0)
+        window.mainBackgroundAccentGlow.Position = UDim2.new(0.82, 0, 0.3, 0)
+        bindAccent(window, window.mainBackgroundAccentGlow, "ImageColor3")
+    end
+
+    local originalUserText = window.userNameLabel and tostring(window.userNameLabel.Text or "") or "@Player"
+    local displayName = originalUserText:gsub("^@", "")
+    local avatarImage = window.playerAvatarImg and window.playerAvatarImg.Image or ""
+
+    local hideTargets = {
+        window.hubNameLabel,
+        window.userNameLabel,
+        window.playerAvatarImg,
+        window.lineSeperator,
+        window.tabNameLabel,
+        window.tabDescriptionLabel,
+        window.sectionHolderScroll,
+        window.uiSettingsButtonFrame,
+        window.uiSettingsPanelFrame,
+        window.watermarkFrame
+    }
+
+    for _, item in ipairs(hideTargets) do
+        if item then
+            item.Visible = false
+        end
+    end
+
+    if window.contentHolderFrame then
+        window.contentHolderFrame.Position = UDim2.fromOffset(Layout.ContentX, Layout.ContentY)
+        window.contentHolderFrame.Size = UDim2.fromOffset(Layout.ContentWidth, Layout.ContentHeight)
+        window.contentHolderFrame.ClipsDescendants = true
+        window.contentHolderFrame.BackgroundTransparency = 1
+    end
+
+    local brandCard = make("Frame", {
+        BackgroundColor3 = Theme.Surface,
+        BorderSizePixel = 0,
+        Position = UDim2.fromOffset(28, 24),
+        Size = UDim2.fromOffset(232, 72),
+        Parent = main
+    })
+    setCorner(brandCard, 24)
+    setStroke(brandCard, Theme.BorderSoft, 1)
+
+    local brandIcon = make("Frame", {
+        BackgroundColor3 = window.config.AccentColor,
+        BorderSizePixel = 0,
+        Position = UDim2.fromOffset(18, 19),
+        Size = UDim2.fromOffset(34, 34),
+        Parent = brandCard
+    })
+    setCorner(brandIcon, 12)
+    bindAccent(window, brandIcon)
+
+    make("TextLabel", {
+        BackgroundTransparency = 1,
+        Text = string.sub(tostring(window.config.Name or "F"), 1, 1),
+        TextColor3 = Color3.fromRGB(28, 20, 23),
+        TextSize = 22,
+        Font = Enum.Font.GothamBold,
+        Size = UDim2.fromScale(1, 1),
+        Parent = brandIcon
+    })
+
+    make("TextLabel", {
+        BackgroundTransparency = 1,
+        Text = tostring(window.config.Name or "Flow // Source 2"),
+        TextColor3 = Theme.Text,
+        TextSize = 16,
+        Font = Enum.Font.GothamSemibold,
+        Position = UDim2.fromOffset(70, 15),
+        Size = UDim2.fromOffset(144, 20),
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = brandCard
+    })
+
+    make("TextLabel", {
+        BackgroundTransparency = 1,
+        Text = "The slogan, if there is one.",
+        TextColor3 = Theme.SubText,
+        TextSize = 12,
+        Font = Enum.Font.Gotham,
+        Position = UDim2.fromOffset(70, 35),
+        Size = UDim2.fromOffset(146, 18),
+        TextXAlignment = Enum.TextXAlignment.Left,
+        Parent = brandCard
+    })
+
+    local rail = make("Frame", {
+        BackgroundColor3 = Theme.Surface,
+        BorderSizePixel = 0,
+        Position = UDim2.fromOffset(Layout.SidebarX, Layout.SidebarY),
+        Size = UDim2.fromOffset(Layout.SidebarWidth, Layout.SidebarHeight),
+        Parent = main
+    })
+    setCorner(rail, 28)
+    setStroke(rail, Theme.BorderSoft, 1)
+
+    local railGlow = make("ImageLabel", {
+        BackgroundTransparency = 1,
+        Image = "rbxassetid://5028857084",
+        ImageColor3 = window.config.AccentColor,
+        ImageTransparency = 0.94,
+        AnchorPoint = Vector2.new(0.5, 0),
+        Position = UDim2.new(0.5, 0, 0, -8),
+        Size = UDim2.fromOffset(110, 82),
+        Parent = rail
+    })
+    bindAccent(window, railGlow, "ImageColor3")
+
+    window._v2SidebarHolder = make("Frame", {
+        BackgroundTransparency = 1,
+        Position = UDim2.fromOffset(10, 22),
+        Size = UDim2.fromOffset(Layout.SidebarWidth - 20, Layout.SidebarHeight - 44),
+        Parent = rail
+    })
+    make("UIListLayout", {
+        Padding = UDim.new(0, 12),
+        HorizontalAlignment = Enum.HorizontalAlignment.Center,
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Parent = window._v2SidebarHolder
+    })
+
+    local railFooterLine = make("Frame", {
+        BackgroundColor3 = Theme.Hairline,
+        BorderSizePixel = 0,
+        Position = UDim2.fromOffset(14, Layout.SidebarHeight - 64),
+        Size = UDim2.fromOffset(Layout.SidebarWidth - 28, 1),
+        Parent = rail
+    })
+    railFooterLine.BackgroundTransparency = 0.25
+
+    local tabStrip = make("Frame", {
+        BackgroundColor3 = Theme.Surface,
+        BorderSizePixel = 0,
+        Position = UDim2.fromOffset(Layout.TabStripX, Layout.TabStripY),
+        Size = UDim2.fromOffset(Layout.TabStripWidth, Layout.TabStripHeight),
+        Parent = main
+    })
+    setCorner(tabStrip, 24)
+    setStroke(tabStrip, Theme.BorderSoft, 1)
+
+    local tabStripGlow = make("ImageLabel", {
+        BackgroundTransparency = 1,
+        Image = "rbxassetid://5028857084",
+        ImageColor3 = window.config.AccentColor,
+        ImageTransparency = 0.95,
+        AnchorPoint = Vector2.new(0.5, 0.5),
+        Position = UDim2.new(0.5, 0, 0.5, 0),
+        Size = UDim2.fromOffset(Layout.TabStripWidth + 70, Layout.TabStripHeight + 30),
+        ZIndex = 0,
+        Parent = tabStrip
+    })
+    bindAccent(window, tabStripGlow, "ImageColor3")
+
+    window._v2TabHolder = make("Frame", {
+        BackgroundTransparency = 1,
+        Position = UDim2.fromOffset(14, 8),
+        Size = UDim2.fromOffset(Layout.TabStripWidth - 28, Layout.TabStripHeight - 16),
+        ClipsDescendants = true,
+        Parent = tabStrip
+    })
+    make("UIListLayout", {
+        FillDirection = Enum.FillDirection.Horizontal,
+        Padding = UDim.new(0, 10),
+        SortOrder = Enum.SortOrder.LayoutOrder,
+        Parent = window._v2TabHolder
+    })
+
+    make("TextLabel", {
+        BackgroundTransparency = 1,
+        Text = displayName ~= "" and displayName or "Player",
+        TextColor3 = Theme.Text,
+        TextSize = 18,
+        Font = Enum.Font.GothamSemibold,
+        Position = UDim2.fromOffset(788, 32),
+        Size = UDim2.fromOffset(132, 22),
+        TextXAlignment = Enum.TextXAlignment.Right,
+        Parent = main
+    })
+
+    make("TextLabel", {
+        BackgroundTransparency = 1,
+        Text = "Till: 1 mar 2026",
+        TextColor3 = Theme.SubText,
+        TextSize = 12,
+        Font = Enum.Font.Gotham,
+        Position = UDim2.fromOffset(790, 56),
+        Size = UDim2.fromOffset(130, 18),
+        TextXAlignment = Enum.TextXAlignment.Right,
+        Parent = main
+    })
+
+    local avatarRing = make("Frame", {
+        BackgroundColor3 = Color3.fromRGB(248, 248, 249),
+        BorderSizePixel = 0,
+        Position = UDim2.fromOffset(924, 26),
+        Size = UDim2.fromOffset(50, 50),
+        Parent = main
+    })
+    setCorner(avatarRing, 25)
+
+    if avatarImage ~= "" then
+        local avatarImageLabel = make("ImageLabel", {
+            BackgroundTransparency = 1,
+            Image = avatarImage,
+            Position = UDim2.fromOffset(2, 2),
+            Size = UDim2.fromOffset(46, 46),
+            Parent = avatarRing
+        })
+        setCorner(avatarImageLabel, 23)
+    end
+
+    local gearBubble = make("TextButton", {
+        AutoButtonColor = false,
+        BackgroundColor3 = Theme.Surface,
+        BorderSizePixel = 0,
+        Position = UDim2.fromOffset(930, 60),
+        Size = UDim2.fromOffset(18, 18),
+        Text = "",
+        Parent = main
+    })
+    setCorner(gearBubble, 10)
+    setStroke(gearBubble, Theme.BorderSoft, 1)
+    make("ImageLabel", {
+        BackgroundTransparency = 1,
+        Image = "rbxassetid://6031280882",
+        ImageColor3 = Color3.fromRGB(220, 220, 226),
+        Position = UDim2.fromOffset(3, 3),
+        Size = UDim2.fromOffset(12, 12),
+        Parent = gearBubble
+    })
+
+    local searchButton = make("TextButton", {
+        AutoButtonColor = false,
+        BackgroundColor3 = Theme.Surface,
+        BorderSizePixel = 0,
+        Position = UDim2.fromOffset(924, 104),
+        Size = UDim2.fromOffset(48, 48),
+        Text = "",
+        Parent = main
+    })
+    setCorner(searchButton, 20)
+    setStroke(searchButton, Theme.BorderSoft, 1)
+    local searchIcon = make("ImageLabel", {
+        BackgroundTransparency = 1,
+        Image = "rbxassetid://10734943674",
+        ImageColor3 = Color3.fromRGB(236, 236, 241),
+        Position = UDim2.fromOffset(14, 14),
+        Size = UDim2.fromOffset(20, 20),
+        Parent = searchButton
+    })
+
+    if window.searchFrame then
+        window.searchFrame.Visible = false
+        window.searchFrame.BackgroundColor3 = Theme.Surface
+        window.searchFrame.Position = UDim2.fromOffset(702, 110)
+        window.searchFrame.Size = UDim2.fromOffset(208, 34)
+        setCorner(window.searchFrame, 18)
+        setStroke(window.searchFrame, Theme.BorderSoft, 1)
+        if window.searchBox then
+            window.searchBox.TextSize = 12
+        end
+    end
+
+    local function syncSearchState()
+        if not window.searchFrame then
+            return
+        end
+
+        local active = window.searchFrame.Visible == true
+        tween(searchButton, {
+            BackgroundColor3 = active and Theme.SurfaceSoft or Theme.Surface
+        }, 0.12)
+        tween(searchIcon, {
+            ImageColor3 = active and window.config.AccentColor or Color3.fromRGB(236, 236, 241)
+        }, 0.12)
+    end
+
+    searchButton.MouseButton1Click:Connect(function()
+        if not window.searchFrame then
+            return
+        end
+
+        window.searchFrame.Visible = not window.searchFrame.Visible
+        if window.searchFrame.Visible and window.searchBox then
+            pcall(function()
+                window.searchBox:CaptureFocus()
+            end)
+        end
+        syncSearchState()
+    end)
+    searchButton.MouseEnter:Connect(function()
+        if not window.searchFrame or not window.searchFrame.Visible then
+            tween(searchButton, {BackgroundColor3 = Theme.SurfaceSoft}, 0.12)
+        end
+    end)
+    searchButton.MouseLeave:Connect(function()
+        if not window.searchFrame or not window.searchFrame.Visible then
+            tween(searchButton, {BackgroundColor3 = Theme.Surface}, 0.12)
+        end
+    end)
+
+    if window.searchBox then
+        window.searchBox.FocusLost:Connect(function()
+            if window.searchFrame and window.searchFrame.Visible then
+                window.searchFrame.Visible = false
+                syncSearchState()
+            end
+        end)
+    end
+
+    registerRefresh(window, syncSearchState)
+    styleSettingsPanel(window, gearBubble)
+end
+
+local function patchTab(tab, window, section)
+    if not tab or tab._v2Patched then
+        return
+    end
+
+    tab._v2Patched = true
+    resizeTabColumns(tab)
+    tab._v2Section = section
+
+    local baseActivate = tab.Activate
+    function tab:Activate(...)
+        baseActivate(self, ...)
+        activateTab(window, self)
+        resizeTabColumns(self)
+    end
+
+    local baseAddGroup = tab.AddGroup
+    function tab:AddGroup(config)
+        local group = baseAddGroup(self, config)
+        resizeTabColumns(self)
+        patchGroup(group, window)
+        group.mainFrame.Size = UDim2.fromOffset(Layout.GroupWidth, group.mainFrame.Size.Y.Offset)
         return group
     end
 end
 
-local function styleSection(sectionObj)
-    if not sectionObj then
+local function patchSection(section, window, config)
+    if not section or section._v2Patched then
         return
     end
 
-    if sectionObj.mainFrame then
-        sectionObj.mainFrame.BackgroundColor3 = V2Palette.Surface
-        tintStroke(sectionObj.mainFrame, V2Palette.Border, 1.15)
-        tintCorners(sectionObj.mainFrame, 11)
+    section._v2Patched = true
+    section._v2Tabs = {}
+    if section.containerFrame then
+        section.containerFrame.Visible = false
     end
+    createSidebarButton(window, section, config and config.Icon)
 
-    local originalAddTab = sectionObj.AddTab
-    function sectionObj:AddTab(tabConfig)
-        local tab = originalAddTab(self, tabConfig)
-        styleTab(tab)
+    local baseAddTab = section.AddTab
+    function section:AddTab(tabConfig)
+        local tab = baseAddTab(self, tabConfig)
+        table.insert(self._v2Tabs, tab)
+        patchTab(tab, window, self)
+        createTabButton(window, self, tab, tabConfig)
+        if not window._v2ActiveSection then
+            activateSection(window, self, false)
+        else
+            refreshTabStates(window)
+        end
         return tab
     end
 end
@@ -112,59 +1536,48 @@ local function styleWindow(window)
         return
     end
 
-    if window.mainFrameYay then
-        window.mainFrameYay.BackgroundColor3 = V2Palette.Background
-        tintCorners(window.mainFrameYay, 16)
-    end
+    window._v2Sections = {}
+    window._v2RefreshCallbacks = {}
+    buildShell(window)
 
-    if window.searchFrame then
-        window.searchFrame.BackgroundColor3 = V2Palette.Surface
-        tintStroke(window.searchFrame, V2Palette.Border, 1.05)
-    end
-
-    if window.uiSettingsButtonFrame then
-        window.uiSettingsButtonFrame.BackgroundColor3 = V2Palette.Surface
-        tintStroke(window.uiSettingsButtonFrame, V2Palette.Border, 1.1)
-    end
-
-    if window.uiSettingsPanelFrame then
-        window.uiSettingsPanelFrame.BackgroundColor3 = V2Palette.Secondary
-        tintStroke(window.uiSettingsPanelFrame, V2Palette.Border, 1.1)
-    end
-
-    if window.watermarkFrame then
-        window.watermarkFrame.BackgroundColor3 = V2Palette.Surface
-        tintCorners(window.watermarkFrame, 10)
-    end
-
-    if window.userNameLabel then
-        window.userNameLabel.TextColor3 = V2Palette.SubText
-    end
-
-    if window.tabDescriptionLabel then
-        window.tabDescriptionLabel.TextColor3 = V2Palette.SubText
-    end
-
-    if window.lineSeperator then
-        window.lineSeperator.BackgroundColor3 = V2Palette.Border
-    end
-
-    local originalCreateSection = window.CreateSection
-    function window:CreateSection(sectionConfig)
-        local section = originalCreateSection(self, sectionConfig)
-        styleSection(section)
+    local baseCreateSection = window.CreateSection
+    function window:CreateSection(config)
+        local section = baseCreateSection(self, config)
+        table.insert(self._v2Sections, section)
+        patchSection(section, self, config or {})
+        refreshSidebarStates(self)
+        refreshTabStates(self)
         return section
     end
+
+    if type(window.SetAccentColor) == "function" then
+        local baseSetAccentColor = window.SetAccentColor
+        function window:SetAccentColor(color, ...)
+            baseSetAccentColor(self, color, ...)
+            runRefresh(self)
+        end
+    end
+
+    if type(window.Notify) == "function" then
+        local baseNotify = window.Notify
+        function window:Notify(config)
+            local notificationFrame = baseNotify(self, config)
+            styleNotification(notificationFrame, self, config or {})
+            return notificationFrame
+        end
+    end
+
+    runRefresh(window)
 end
 
 function BaseLibrary.new(config)
     config = config or {}
     config.Name = config.Name or "Flow // Source 2"
-    config.AccentColor = config.AccentColor or V2Palette.Accent
-    config.BackgroundColor = config.BackgroundColor or V2Palette.Background
-    config.SecondaryColor = config.SecondaryColor or V2Palette.Secondary
-    config.TextColor = config.TextColor or V2Palette.Text
-    config.SubTextColor = config.SubTextColor or V2Palette.SubText
+    config.AccentColor = config.AccentColor or Theme.Accent
+    config.BackgroundColor = config.BackgroundColor or Theme.Background
+    config.SecondaryColor = config.SecondaryColor or Theme.Surface
+    config.TextColor = config.TextColor or Theme.Text
+    config.SubTextColor = config.SubTextColor or Theme.Muted
 
     local window = baseNew(config)
     styleWindow(window)
