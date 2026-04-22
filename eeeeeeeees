@@ -1527,6 +1527,13 @@ local function patchSection(section, window, config)
         else
             refreshTabStates(window)
         end
+        task.defer(function()
+            if window._v2ActiveSection == self and not window.currentTabYay and self._v2Tabs[1] then
+                pcall(function()
+                    self._v2Tabs[1]:Activate()
+                end)
+            end
+        end)
         return tab
     end
 end
